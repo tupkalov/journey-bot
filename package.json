@@ -1,0 +1,34 @@
+{
+  "name": "english-quest-bot",
+  "version": "1.0.0",
+  "description": "Roleplay English Learning Bot is a Telegram bot designed to enhance English language proficiency through the simulation of everyday situations. Users can practice English conversationally by acting out various roles in these scenarios, fostering a practical understanding of language use in real-life contexts.",
+  "main": "src/main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "docker-compose up -d --build dev",
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tupkalov/english-quest-bot.git"
+  },
+  "keywords": [
+    "english",
+    "training",
+    "telegram",
+    "bot"
+  ],
+  "author": "tupkalov",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tupkalov/english-quest-bot/issues"
+  },
+  "homepage": "https://github.com/tupkalov/english-quest-bot#readme",
+  "dependencies": {
+    "gpt-3-encoder": "^1.1.4",
+    "node-telegram-bot-api": "^0.61.0",
+    "openai": "^3.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
