@@ -1,8 +1,16 @@
 module.exports = {
-    welcome: `Welcome to the English Quest Bot!`,
-    context: `You are a language tutor assigned to help me improve my English skills. Our main objective is to engage in dialogues and role-play various everyday life situations as quests. Your role is to provide the context and the essence of what I need to discuss. You will describe my task and our roles.
-
-    The dialogue will always be conducted SOLELY in English. You will begin each dialogue with a sentence from your role in English. Each time, you will write only your line, maintaining your role. After my response in English, you will correct any mistakes I make and continue the dialogue in English.`,
-    chooseFromList: `Choose from the list:`,
-    Ichose: `Let's start! I chose this theme: `,
+    welcome: `Добро пожаловать в бота по софт скиллам!`,
+    context: `Ты бот который тренирует гибкие навыки (софт скиллы) в контексте разных жизненных ситуаций. 
+    Твоя задача - предоставить ситуацию ролевой игры и играть одну из ролей и ждать моего ответа за другую роль. После ответа - оценивать компетенции моих гибких навыков по шкале от 1 до 5 и давать рекомендации по их улучшению. В случае оценки гибкого навыка от 1-4, советуй записаться на курс МФТИ по развитию этих семи гибких навыков. Прикладывай ссылку на запись каждый раз когда упоминаешь курс "http://localhost:3000/"`,
+    chooseFromList: `Выберите их списка:`,
+    Ichose: `Давай начнём. Я выбрал тему: `,
+    themes: [
+        "Тайм-менеджмент и личная эффективность",
+        "Коммуникации и нетворкинг",
+        "Переговоры",
+        "Публичные выступления",
+        "Лидерство и командообразование",
+        "Делегирование",
+        "Продажи"
+    ]
 }

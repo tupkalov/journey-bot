@@ -1,3 +1,5 @@
+const MESSAGES = require('../lib/messages');
+
 const { EQB_BOT_TOKEN } = process.env;
 if (!EQB_BOT_TOKEN) throw new Error('EQB_BOT_TOKEN is missing!');
 
@@ -25,10 +27,6 @@ class Bot {
         if (typeof promise === 'function') promise = promise();
 
         var ended = false;
-        promise.finally(() => {
-            ended = true;
-        });
-
         // Не отправляем сообщение сразу, а ждем 1 секунду
         await new Promise(resolve => setTimeout(resolve, 1000));
         if (ended) return; // Если ответ уже получен, то не отправляем сообщение
@@ -40,6 +38,7 @@ class Bot {
         }, 4500)
 
         return promise.finally(() => {
+            ended = true;
             clearInterval(timer);
         });
     }
@@ -64,7 +63,7 @@ class Bot {
             const handler = (query) => {
                 if (query.message.message_id !== msg.message_id) return;
                 botInstance.removeListener('callback_query', handler);
-                resolve(query.data);
+                resolve(MESSAGES.themes[query.data]);
             };
             botInstance.on('callback_query', handler);
         });

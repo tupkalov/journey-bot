@@ -37,7 +37,7 @@ module.exports = class AIChat extends EventEmitter{
     async getThemes () {
         try {
             const response = await openai.createChatCompletion({
-                model: "gpt-4-0613",
+                model: "gpt-4",
                 messages: [{role: "user", content: `${MESSAGES.context}. Get list of themes in 5 items with just a title of theme for conversation:\n\n` }],
                 max_tokens: 500,
                 temperature: 0.8,
@@ -56,9 +56,9 @@ module.exports = class AIChat extends EventEmitter{
         var answer;
         try {
             const response = await openai.createChatCompletion({
-                model: "gpt-4-0613",
+                model: "gpt-3.5-turbo-0613",
                 messages: [...this.context, aiMessage].map(({ role, content }) => ({ role, content })),
-                max_tokens: 500,
+                max_tokens: 1000,
                 temperature: 0.8
             });
             answer = response.data.choices[0].message;
