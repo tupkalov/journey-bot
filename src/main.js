@@ -1,56 +1,81 @@
-const Bot = require('./lib/Bot');
-const AIChat = require('./lib/AIChat');
-const MESSAGES = require('./lib/messages');
+const { TelegramBot } = require('./lib/Telegram');
+const { AI } = require('./lib/AI');
+const MESSAGES = require('./messages.js');
 
-const telegramBot = new Bot;
+const telegramBot = new TelegramBot;
 
-telegramBot.onMessage(async (event, msg) => {
-    if (msg.text === '/start') event.stopPropagation();
-    else return;
+const COUNT_BY_THEME = 5;
+const LIMIT_BY_USER = 50;
+
+telegramBot.onMessage(async (event, msg, chat) => {
+    // ограничение на количество сообщений
+    if (chat.messageCounter >= LIMIT_BY_USER) {
+        chat.sendMessage(MESSAGES.limit);
+        event.stopPropagation();
+        return;
+    }
+
+    if (msg.text !== '/start') return;
+
+    chat.endConversation?.(); // Закрываем предыдущую беседу
+    var endConversation;
+    const endPromise = new Promise(resolve => endConversation = chat.endConversation = resolve);
+
+    event.stopPropagation();
     try {
-        const ai = new AIChat(msg.from.id);
-
-        const themes = MESSAGES.themes;
+        const ai = new AI(msg.from.id);
+        chat.setHistoryReducer(ai.historyReducer);
+        chat.clearHistory();
         
-        const chooseMsg = await telegramBot.sendMessage(msg.chat.id, MESSAGES.chooseFromList, {
-            reply_to_message_id: msg.message_id,
-            reply_markup: {
-                inline_keyboard: themes.map((theme, index) => {
-                    // Ограничиваем длину текста чтобы телеграм не ругался
-                    if (theme.length > 64) theme = theme.slice(0, 61) + '...';
-                    return [{
-                        text: theme,
-                        callback_data: index.toString()
-                    }]
-                })
-            }
+
+        // Первое сообщение которое не отправляем пользователю
+        const startMessage = { role: 'system', content: MESSAGES.context, important: true };
+        chat.saveToHistory(startMessage);
+        
+        // Отправляем выбор темы и ждем выбора
+        const choose = await chat.sendChooses(MESSAGES.chooseFromList, MESSAGES.themes.map(({ label }) => label));
+        const theme = MESSAGES.themes.find(({ label }) => label === choose);;
+        // Формируем выбор темы пользователя для ИИ
+        var answerFromUser = { role: "user", content: MESSAGES.Ichose + choose, important: true };
+        chat.saveToHistory(answerFromUser);
+        // Отправляем ответ от ИИ
+        var answerFromAssistant = { role: "assistant", content: theme.start, important: true };
+        chat.saveToHistory(answerFromAssistant);
+        await chat.sendMessage(answerFromAssistant.content);
+
+        // Ждем ответа от пользователя
+        answerFromUser = await chat.waitForMessage({ endPromise }).then(msg => {
+            return msg && { role: "user", content: msg.text };
         });
 
-        ai.cache({ role: 'assistant', content: MESSAGES.context, important: true });
-        const choose = await telegramBot.waitForChoose(chooseMsg);
-        var answerFromUser = { role: "user", content: MESSAGES.Ichose + choose, important: true };
+        let index = 0;
+        do {
+            index++;
+            const thisIsEnd = index > COUNT_BY_THEME;
 
-        var answerFromAssistant;
-        try {
-            do {
-                // Ждем ответа от ИИ
-                answerFromAssistant = await telegramBot.sendBusy(msg.chat.id, async () => {
-                    return ai.sendWithContext(answerFromUser);
-                });
-                // Отправляем ответ от ИИ
-                await telegramBot.sendMessage(msg.chat.id, answerFromAssistant.content);
-                // Ждем ответа от пользователя
-                answerFromUser = await telegramBot.waitForMessage(msg.chat.id, { endPromise: ai.endPromise }).then(msg => {
-                    return msg ? { role: "user", content: msg.text, important: true } : false;
-                })
-                
-            // Если ответ пустой значит пользователь закончил
-            } while (answerFromUser);
-        } catch (error) {
-            console.error(error.message)
-            ai.endConversation();
-        }
+            if (thisIsEnd)  answerFromUser.content += MESSAGES.end;
+            else if (theme.addToAI) answerFromUser.content += theme.addToAI;
+            
+            // Ждем ответа от ИИ
+            chat.saveToHistory(answerFromUser);
+            answerFromAssistant = await chat.sendBusy(ai.sendHistory(chat.history));
+            // Сохраняем ответ от ИИ в историю
+            if (!thisIsEnd) chat.saveToHistory(answerFromAssistant);
+            else answerFromAssistant.content += MESSAGES.AIEnd;
+
+            // Отправляем ответ от ИИ
+            await chat.sendMessage(answerFromAssistant.content);
+            // Ждем ответа от пользователя
+            answerFromUser = await chat.waitForMessage({ endPromise }).then(msg => {
+                return msg && { role: "user", content: msg.text };
+            })
+            
+        // Если ответ пустой значит пользователь закончил
+        } while (answerFromUser);
     } catch (error) {
+        if (error?.message?.endsWith('Handled')) return;
         console.error(error);
+    } finally {
+        endConversation()
     }
 })
