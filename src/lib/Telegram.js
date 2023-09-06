@@ -1,5 +1,12 @@
 const MESSAGES = require('../messages');
 
+const JSONdb = require('simple-json-db');
+const db = new JSONdb('/app/data/storage.json');
+const chatsCache = db.get('chatsCache') || {};
+const updateJSON = () => {
+    db.set('chatsCache', chatsCache);
+}
+
 const { EQB_BOT_TOKEN } = process.env;
 if (!EQB_BOT_TOKEN) throw new Error('EQB_BOT_TOKEN is missing!');
 
@@ -13,7 +20,8 @@ class Chat {
         if (this.bot.chats[id]) this.bot.chats[id].endConversation();
         this.bot.chats[id] = this;
         this.id = id;
-        this.messageCounter = 0;
+        this.messageCounter = chatsCache[id]?.messageCounter || 0;
+        this.history = chatsCache[id]?.history || [];
     }
 
     async sendChooses(header, chooses) {
@@ -94,6 +102,19 @@ class Chat {
         this.history.push(message);
         this.messageCounter++;
         this.historyReducer?.(this.history);
+        this.saveCache();
+    }
+
+    saveCache() {
+        chatsCache[this.id] = {
+            messageCounter: this.messageCounter
+        };
+        updateJSON();
+    }
+
+    resetCounter() {
+        this.messageCounter = 0;
+        this.saveCache();
     }
 }
 

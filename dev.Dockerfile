@@ -2,7 +2,5 @@ FROM node:lts-alpine
 ENV NODE_ENV=dev
 WORKDIR /app
 COPY package.json package-lock.json npm-shrinkwrap.json* ./
-RUN npm install && mv node_modules ../
-RUN chown -R node /app
-USER node
-CMD ["node", "src/main.js"]
+RUN npm install -g nodemon && npm install
+CMD ["nodemon", "--inspect=0.0.0.0:9229", "--watch", "src", "src/main.js"]

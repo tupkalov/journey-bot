@@ -8,6 +8,13 @@ const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
 const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
 
 telegramBot.onMessage(async (event, msg, chat) => {
+    if (msg.text === '/resetChatCounter') {
+        event.stopPropagation();
+        chat.resetCounter();
+        chat.sendMessage('Счетчик сброшен');
+        return;
+    }
+
     // ограничение на количество сообщений
     if (chat.messageCounter >= LIMIT_BY_USER) {
         chat.sendMessage(MESSAGES.limit);
@@ -75,8 +82,9 @@ telegramBot.onMessage(async (event, msg, chat) => {
 
                 // Таймаут если пользователь не ответил за 2 часа 
                 let timeout;
-                if (!thisIsEnd) timeout = setTimeout(() => {
-                    chat.sendMessage(MESSAGES.timeout);
+                timeout = setTimeout(() => {
+                    if (chat.messageCounter < LIMIT_BY_USER && !thisIsEnd)
+                        chat.sendMessage(MESSAGES.timeout);
                 }, 1000 * 60 * 60 * 2);
 
                 answerFromUser = await anwerFromUserPromise;
