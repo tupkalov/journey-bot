@@ -1,6 +1,6 @@
 version: '3.7'
 services:
-  softskills:
+  bot:
     #build: .
     image: nikolayreal/softskills:latest
     restart: unless-stopped
