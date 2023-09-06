@@ -4,8 +4,8 @@ const MESSAGES = require('./messages.js');
 
 const telegramBot = new TelegramBot;
 
-const COUNT_BY_THEME = 5;
-const LIMIT_BY_USER = 50;
+const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
+const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
 
 telegramBot.onMessage(async (event, msg, chat) => {
     // ограничение на количество сообщений
