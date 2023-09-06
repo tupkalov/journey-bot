@@ -46,7 +46,7 @@ module.exports.AI = class AI extends EventEmitter{
                 model: "gpt-3.5-turbo-0613",
                 messages: history.map(({ role, content }) => ({ role, content })),
                 max_tokens: 1000,
-                temperature: 0.4
+                temperature: .8
             });
             answer = response.data.choices[0].message;
         } catch (err) {

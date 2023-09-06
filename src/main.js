@@ -48,32 +48,49 @@ telegramBot.onMessage(async (event, msg, chat) => {
             return msg && { role: "user", content: msg.text };
         });
 
-        let index = 0;
+        let index = 1;
         do {
-            index++;
-            const thisIsEnd = index > COUNT_BY_THEME;
+            try {
+                const thisIsEnd = index > COUNT_BY_THEME;
 
-            if (thisIsEnd)  answerFromUser.content += MESSAGES.end;
-            else if (theme.addToAI) answerFromUser.content += theme.addToAI;
-            
-            // Ждем ответа от ИИ
-            chat.saveToHistory(answerFromUser);
-            answerFromAssistant = await chat.sendBusy(ai.sendHistory(chat.history));
-            // Сохраняем ответ от ИИ в историю
-            if (!thisIsEnd) chat.saveToHistory(answerFromAssistant);
-            else answerFromAssistant.content += MESSAGES.AIEnd;
+                if (thisIsEnd)  answerFromUser.content += MESSAGES.end;
+                else if (theme.addToAI) answerFromUser.content += theme.addToAI;
+                
+                // Ждем ответа от ИИ
+                chat.saveToHistory(answerFromUser);
+                answerFromAssistant = await chat.sendBusy(ai.sendHistory(chat.history));
+                // Сохраняем ответ от ИИ в историю
+                if (!thisIsEnd) chat.saveToHistory(answerFromAssistant);
+                else answerFromAssistant.content += MESSAGES.AIEnd;
 
-            // Отправляем ответ от ИИ
-            await chat.sendMessage(answerFromAssistant.content);
-            // Ждем ответа от пользователя
-            answerFromUser = await chat.waitForMessage({ endPromise }).then(msg => {
-                return msg && { role: "user", content: msg.text };
-            })
+                // Отправляем ответ от ИИ
+                let sendToUser = answerFromAssistant.content;
+                if (!thisIsEnd) sendToUser = `${index}/${COUNT_BY_THEME}: ${sendToUser}`
+                await chat.sendMessage(sendToUser);
+
+                // Ждем ответа от пользователя
+                anwerFromUserPromise = chat.waitForMessage({ endPromise }).then(msg => {
+                    return msg && { role: "user", content: msg.text };
+                })
+
+                // Таймаут если пользователь не ответил за 2 часа 
+                let timeout;
+                if (!thisIsEnd) timeout = setTimeout(() => {
+                    chat.sendMessage(MESSAGES.timeout);
+                }, 1000 * 60 * 60 * 2);
+
+                answerFromUser = await anwerFromUserPromise;
+                clearTimeout(timeout);
+
+                index++;
+            } catch (error) {
+                if (error?.message?.endsWith('ChatEnded:Handled')) return;
+                console.error(error)
+            }
             
         // Если ответ пустой значит пользователь закончил
         } while (answerFromUser);
     } catch (error) {
-        if (error?.message?.endsWith('Handled')) return;
         console.error(error);
     } finally {
         endConversation()

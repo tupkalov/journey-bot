@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+  softskills:
+    #build: .
+    image: nikolayreal/softskills:latest
+    restart: unless-stopped
+    environment:
+      EQB_BOT_TOKEN: ${EQB_BOT_TOKEN}
+      EQB_OPENAI_API_KEY: ${EQB_OPENAI_API_KEY}
+      EQB_OPENAI_ORG: ${EQB_OPENAI_ORG}
+    #volumes:
+    #  - ./:/app
