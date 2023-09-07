@@ -63,13 +63,14 @@ module.exports.AI = class AI extends EventEmitter{
             return encode(history.map(val => val.content).join(' ')).length
         }
 
-
-        while (getTokenLength(history) > 3700) {
+        label:
+        while (getTokenLength(history) > 3000) {
             for (const msg of history) {
                 if (msg.important) continue;
                 history.splice(history.indexOf(msg), 1);
-                break;
+                continue label;
             }
+            break;
         }
 
         return history;

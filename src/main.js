@@ -15,6 +15,15 @@ telegramBot.onMessage(async (event, msg, chat) => {
         return;
     }
 
+    if (msg.text === '/resetReminders') {
+        event.stopPropagation();
+        chat.cacheData.reminderEnds = false;
+        chat.cacheData.nextReminder = 0;
+        chat.saveCache();
+        chat.sendMessage('Напоминания сброшены');
+        return;
+    }
+
     // ограничение на количество сообщений
     if (chat.messageCounter >= LIMIT_BY_USER) {
         chat.sendMessage(MESSAGES.limit);
@@ -22,7 +31,11 @@ telegramBot.onMessage(async (event, msg, chat) => {
         return;
     }
 
-    if (msg.text !== '/start') return;
+    // Если пользователь еще не писал ничего, то приветствуем его
+    if (msg.text !== '/start' && chat.inProcess) {
+        return;
+    }
+    chat.inProcess = true;
 
     chat.endConversation?.(); // Закрываем предыдущую беседу
     var endConversation;
