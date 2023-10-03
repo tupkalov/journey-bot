@@ -6,6 +6,7 @@ const telegramBot = new TelegramBot;
 
 const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
 const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
+const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.SOFTSKILLS_TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
 
 telegramBot.onMessage(async (event, msg, chat) => {
     if (msg.text === '/resetChatCounter') {
@@ -89,19 +90,22 @@ telegramBot.onMessage(async (event, msg, chat) => {
                 await chat.sendMessage(sendToUser);
 
                 // Ждем ответа от пользователя
-                anwerFromUserPromise = chat.waitForMessage({ endPromise }).then(msg => {
+                const anwerFromUserPromise = chat.waitForMessage({ endPromise }).then(msg => {
                     return msg && { role: "user", content: msg.text };
                 })
 
                 // Таймаут если пользователь не ответил за 2 часа 
                 let timeout;
-                timeout = setTimeout(() => {
-                    if (chat.messageCounter < LIMIT_BY_USER && !thisIsEnd)
-                        chat.sendMessage(MESSAGES.timeout);
-                }, 1000 * 60 * 60 * 2);
+                try {
+                    timeout = setTimeout(() => {
+                        if (chat.messageCounter < LIMIT_BY_USER && !thisIsEnd)
+                            chat.sendMessage(MESSAGES.timeout);
+                    }, TIMEOUT_FOR_USER_ANSWER);
 
-                answerFromUser = await anwerFromUserPromise;
-                clearTimeout(timeout);
+                    answerFromUser = await anwerFromUserPromise;
+                } finally {
+                    clearTimeout(timeout);
+                }
 
                 index++;
             } catch (error) {

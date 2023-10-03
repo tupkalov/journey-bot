@@ -1,7 +1,7 @@
 const MESSAGES = require('../messages');
 
 const EventEmitter = require('node:events');
-
+const http = require('http');
 const JSONdb = require('simple-json-db');
 const db = new JSONdb('/app/data/storage.json');
 const chatsCache = db.get('chatsCache') || {};
@@ -9,8 +9,8 @@ const updateJSON = () => {
     db.set('chatsCache', chatsCache);
 }
 
-const REMINDERS_CHECK_INTERVAL = 5 * 1000; 
-const REMINDERS_SEND_INTERVAL = 3 * 24 * 60 * 60 * 1000;
+const REMINDERS_SEND_INTERVAL = parseInt(process.env.REMINDERS_SEND_INTERVAL) || 3 * 24 * 60 * 60 * 1000;
+const REMINDERS_CHECK_INTERVAL = Math.round(REMINDERS_SEND_INTERVAL / 100); 
 
 const { EQB_BOT_TOKEN } = process.env;
 if (!EQB_BOT_TOKEN) throw new Error('EQB_BOT_TOKEN is missing!');
@@ -34,6 +34,32 @@ process.on('SIGTERM', () => {
     process.exit(0);
 });
 
+// healthcheck server
+
+const requestHandler = (req, res) => {
+    if (req.url === '/health' && req.method === 'GET') {
+        // Здесь мы проверяем состояние бота
+        botInstance.getMe()
+            .then(me => {
+                res.writeHead(200, {'Content-Type': 'application/json'});
+                res.end('ok');
+            })
+            .catch(error => {
+                res.writeHead(500, {'Content-Type': 'application/json'});
+                res.end('error');
+            });
+    } else {
+        res.writeHead(404, {'Content-Type': 'text/plain'});
+        res.end('Not Found');
+    }
+};
+
+const hcserver = http.createServer(requestHandler);
+
+hcserver.listen(3003, () => {
+    console.log(`hc server running on http://localhost:3003/`);
+});
+
 class Chat extends EventEmitter {
     constructor(bot, id, cacheData) {
         super();
@@ -43,7 +69,7 @@ class Chat extends EventEmitter {
         this.bot.chats[id] = this;
         this.id = parseInt(id);
         this.messageCounter = 0;
-        this.cacheData = cacheData || {};
+        this.cacheData = cacheData || { createDt: Date.now() };
         Object.assign(this, cacheData);
 
         this.saveCache = debounce(this._saveCache.bind(this), 1000);
@@ -149,15 +175,18 @@ class Chat extends EventEmitter {
     }
 
     async remind() {
-        const reminder = MESSAGES.reminders?.[this.cacheData.nextReminder]?.text
-        if (!reminder) {
-            this.cacheData.reminderEnds = true;
-        } else {
-            await this.sendMessage(reminder);
-            this.cacheData.nextReminder++;
+        try {
+            const reminder = MESSAGES.reminders?.[this.cacheData.nextReminder]?.text
+            if (!reminder) {
+                this.cacheData.reminderEnds = true;
+            } else {
+                this.cacheData.nextReminder++;
+                await this.sendMessage(reminder);
+                this.lastMessageDt = Date.now();
+            }
+        } finally {
+            this.saveCache();
         }
-        this.lastMessageDt = Date.now();
-        this.saveCache();
     }
 
     resetCounter() {
@@ -209,12 +238,54 @@ class TelegramBot {
 
     startReminders() {
         setInterval(() => {
+            // После понедельника не шлём напоминания
+            if (Date.now() > 1695589254227) return;
             for (const id in this.chats) {
-                const chat = this.chats[id];
-                if (chat.lastMessageDt && Date.now() - chat.lastMessageDt > REMINDERS_SEND_INTERVAL) {
-                    if (chat.cacheData.reminderEnds) continue;
-                    chat.remind();
+                try {
+                    const chat = this.chats[id];
+                    if (chat.lastMessageDt && Date.now() - chat.lastMessageDt > REMINDERS_SEND_INTERVAL) {
+                        if (chat.cacheData.reminderEnds) continue;
+                        chat.remind().catch((e) => {
+                            console.error(e.message, 'remindError');
+                        })
+                    }
+                } catch (e) {
+                    console.error(e);
                 }
+            }
+        }, REMINDERS_CHECK_INTERVAL);
+
+        // send schedule
+        setInterval(() => {
+            try {
+                const { schedule = [] } = MESSAGES;
+                for (const scheduleItem of schedule) {
+                    for (const id in this.chats) {
+                        let chat;
+                        try {
+                            chat = this.chats[id];
+                            chat.cacheData.scheduledSended = chat.cacheData.scheduledSended || [];
+                            // Провверяем, что сообщение ещё не отправлено
+                            if (chat.cacheData.scheduledSended.includes(scheduleItem.name)) return;
+                            // Проверяем, что время пришло
+                            if (Date.now() < scheduleItem.dt) continue;
+                            // Сохраняем что сообщение было отправлено
+                            chat.cacheData.scheduledSended.push(scheduleItem.name);
+                            // Проверяем что пользователь не свежесозданный
+                            if (chat.cacheData.createDt && chat.cacheData.createDt > scheduleItem.dt) continue;
+
+                            chat.sendMessage(scheduleItem.text).catch((e) => {
+                                console.error(e.message, 'scheduleError');
+                            });
+                        } catch (e) {
+                            console.error(e);
+                        } finally {
+                            chat?.saveCache();
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(e);
             }
         }, REMINDERS_CHECK_INTERVAL);
     }
