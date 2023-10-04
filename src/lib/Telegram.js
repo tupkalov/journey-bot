@@ -1,5 +1,3 @@
-const MESSAGES = require('../messages');
-
 const EventEmitter = require('node:events');
 const http = require('http');
 const JSONdb = require('simple-json-db');
@@ -8,9 +6,6 @@ const chatsCache = db.get('chatsCache') || {};
 const updateJSON = () => {
     db.set('chatsCache', chatsCache);
 }
-
-const REMINDERS_SEND_INTERVAL = parseInt(process.env.REMINDERS_SEND_INTERVAL) || 3 * 24 * 60 * 60 * 1000;
-const REMINDERS_CHECK_INTERVAL = Math.round(REMINDERS_SEND_INTERVAL / 100); 
 
 const { EQB_BOT_TOKEN } = process.env;
 if (!EQB_BOT_TOKEN) throw new Error('EQB_BOT_TOKEN is missing!');
@@ -35,18 +30,26 @@ process.on('SIGTERM', () => {
 });
 
 // healthcheck server
+let status = true;
+botInstance.on('poll', () => {
+    status = true;
+});
+botInstance.on('polling_error', () => {
+    status = false;
+});
 
 const requestHandler = (req, res) => {
     if (req.url === '/health' && req.method === 'GET') {
         // Здесь мы проверяем состояние бота
         botInstance.getMe()
             .then(me => {
-                res.writeHead(200, {'Content-Type': 'application/json'});
-                res.end('ok');
+                if (!status) res.writeHead(500, {'Content-Type': 'application/json'});
+                else res.writeHead(200, {'Content-Type': 'application/json'});
+                res.end();
             })
             .catch(error => {
                 res.writeHead(500, {'Content-Type': 'application/json'});
-                res.end('error');
+                res.end();
             });
     } else {
         res.writeHead(404, {'Content-Type': 'text/plain'});
@@ -165,28 +168,12 @@ class Chat extends EventEmitter {
 
     _saveCache() {
         this.cacheData = chatsCache[this.id] = {
-            nextReminder: 0,
             lastMessageDt: this.lastMessageDt,
             ...this.cacheData,
             messageCounter: this.messageCounter
         };
 
         updateJSON();
-    }
-
-    async remind() {
-        try {
-            const reminder = MESSAGES.reminders?.[this.cacheData.nextReminder]?.text
-            if (!reminder) {
-                this.cacheData.reminderEnds = true;
-            } else {
-                this.cacheData.nextReminder++;
-                await this.sendMessage(reminder);
-                this.lastMessageDt = Date.now();
-            }
-        } finally {
-            this.saveCache();
-        }
     }
 
     resetCounter() {
@@ -218,8 +205,6 @@ class TelegramBot {
         })
 
         this.loadChatsFromCache();
-
-        this.startReminders();
     }
     
     onMessage (handler) {
@@ -234,60 +219,6 @@ class TelegramBot {
         for (const id in chatsCache) {
             new Chat(this, id, chatsCache[id]);
         }
-    }
-
-    startReminders() {
-        setInterval(() => {
-            // После понедельника не шлём напоминания
-            if (Date.now() > 1695589254227) return;
-            for (const id in this.chats) {
-                try {
-                    const chat = this.chats[id];
-                    if (chat.lastMessageDt && Date.now() - chat.lastMessageDt > REMINDERS_SEND_INTERVAL) {
-                        if (chat.cacheData.reminderEnds) continue;
-                        chat.remind().catch((e) => {
-                            console.error(e.message, 'remindError');
-                        })
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-        }, REMINDERS_CHECK_INTERVAL);
-
-        // send schedule
-        setInterval(() => {
-            try {
-                const { schedule = [] } = MESSAGES;
-                for (const scheduleItem of schedule) {
-                    for (const id in this.chats) {
-                        let chat;
-                        try {
-                            chat = this.chats[id];
-                            chat.cacheData.scheduledSended = chat.cacheData.scheduledSended || [];
-                            // Провверяем, что сообщение ещё не отправлено
-                            if (chat.cacheData.scheduledSended.includes(scheduleItem.name)) return;
-                            // Проверяем, что время пришло
-                            if (Date.now() < scheduleItem.dt) continue;
-                            // Сохраняем что сообщение было отправлено
-                            chat.cacheData.scheduledSended.push(scheduleItem.name);
-                            // Проверяем что пользователь не свежесозданный
-                            if (chat.cacheData.createDt && chat.cacheData.createDt > scheduleItem.dt) continue;
-
-                            chat.sendMessage(scheduleItem.text).catch((e) => {
-                                console.error(e.message, 'scheduleError');
-                            });
-                        } catch (e) {
-                            console.error(e);
-                        } finally {
-                            chat?.saveCache();
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }, REMINDERS_CHECK_INTERVAL);
     }
 }
 

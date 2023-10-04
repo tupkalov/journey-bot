@@ -1,12 +1,17 @@
 const { TelegramBot } = require('./lib/Telegram');
 const { AI } = require('./lib/AI');
-const MESSAGES = require('./messages.js');
+const MESSAGES = require('../config/messages.js');
+const RemindersController = require('./RemindersController');
 
 const telegramBot = new TelegramBot;
 
 const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
 const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
 const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.SOFTSKILLS_TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
+
+// Настройки работы напоминаний
+const REMINDERS_SEND_INTERVAL = parseInt(process.env.REMINDERS_SEND_INTERVAL) || 3 * 24 * 60 * 60 * 1000;
+const REMINDERS_CHECK_INTERVAL = Math.round(REMINDERS_SEND_INTERVAL / 100); 
 
 telegramBot.onMessage(async (event, msg, chat) => {
     if (msg.text === '/resetChatCounter') {
@@ -121,3 +126,10 @@ telegramBot.onMessage(async (event, msg, chat) => {
         endConversation()
     }
 })
+
+new RemindersController
+(telegramBot, {
+    sendInterval: REMINDERS_SEND_INTERVAL,
+    checkInterval: REMINDERS_CHECK_INTERVAL,
+    MESSAGES
+});
