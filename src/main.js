@@ -1,55 +1,135 @@
-const Bot = require('./lib/Bot');
-const AIChat = require('./lib/AIChat');
-const MESSAGES = require('./lib/messages');
+const { TelegramBot } = require('./lib/Telegram');
+const { AI } = require('./lib/AI');
+const MESSAGES = require('../config/messages.js');
+const RemindersController = require('./RemindersController');
 
-const telegramBot = new Bot;
+const telegramBot = new TelegramBot;
 
-telegramBot.onMessage(async (event, msg) => {
-    if (msg.text === '/start') event.stopPropagation();
-    else return;
+const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
+const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
+const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.SOFTSKILLS_TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
 
-    const ai = new AIChat(msg.from.id);
+// Настройки работы напоминаний
+const REMINDERS_SEND_INTERVAL = parseInt(process.env.REMINDERS_SEND_INTERVAL) || 3 * 24 * 60 * 60 * 1000;
+const REMINDERS_CHECK_INTERVAL = Math.round(REMINDERS_SEND_INTERVAL / 100); 
 
-    const themesPromise = ai.getThemes()
-    telegramBot.sendBusy(msg.chat.id, themesPromise);
-    const themes = await themesPromise;
-    
-    const chooseMsg = await telegramBot.sendMessage(msg.chat.id, MESSAGES.chooseFromList, {
-        reply_to_message_id: msg.message_id,
-        reply_markup: {
-            inline_keyboard: themes.map((theme, index) => {
-                // Ограничиваем длину текста чтобы телеграм не ругался
-                if (theme.length > 64) theme = theme.slice(0, 61) + '...';
-                return [{
-                    text: theme,
-                    callback_data: theme
-                }]
-            })
-        }
-    });
+telegramBot.onMessage(async (event, msg, chat) => {
+    if (msg.text === '/resetChatCounter') {
+        event.stopPropagation();
+        chat.resetCounter();
+        chat.sendMessage('Счетчик сброшен');
+        return;
+    }
 
-    const choose = await telegramBot.waitForChoose(chooseMsg);
-    var answerFromUser = { role: "user", content: MESSAGES.Ichose + choose, important: true };
+    if (msg.text === '/resetReminders') {
+        event.stopPropagation();
+        chat.cacheData.reminderEnds = false;
+        chat.cacheData.nextReminder = 0;
+        chat.saveCache();
+        chat.sendMessage('Напоминания сброшены');
+        return;
+    }
 
-    var answerFromAssistant;
+    // ограничение на количество сообщений
+    if (chat.messageCounter >= LIMIT_BY_USER) {
+        chat.sendMessage(MESSAGES.limit);
+        event.stopPropagation();
+        return;
+    }
+
+    // Если пользователь еще не писал ничего, то приветствуем его
+    if (msg.text !== '/start' && chat.inProcess) {
+        return;
+    }
+    chat.inProcess = true;
+
+    chat.endConversation?.(); // Закрываем предыдущую беседу
+    var endConversation;
+    const endPromise = new Promise(resolve => endConversation = chat.endConversation = resolve);
+
+    event.stopPropagation();
     try {
+        const ai = new AI(msg.from.id);
+        chat.setHistoryReducer(ai.historyReducer);
+        chat.clearHistory();
+        
+
+        // Первое сообщение которое не отправляем пользователю
+        const startMessage = { role: 'system', content: MESSAGES.context, important: true };
+        chat.saveToHistory(startMessage);
+        
+        // Отправляем выбор темы и ждем выбора
+        const choose = await chat.sendChooses(MESSAGES.chooseFromList, MESSAGES.themes.map(({ label }) => label));
+        const theme = MESSAGES.themes.find(({ label }) => label === choose);;
+        // Формируем выбор темы пользователя для ИИ
+        var answerFromUser = { role: "user", content: MESSAGES.Ichose + choose, important: true };
+        chat.saveToHistory(answerFromUser);
+        // Отправляем ответ от ИИ
+        var answerFromAssistant = { role: "assistant", content: theme.start, important: true };
+        chat.saveToHistory(answerFromAssistant);
+        await chat.sendMessage(answerFromAssistant.content);
+
+        // Ждем ответа от пользователя
+        answerFromUser = await chat.waitForMessage({ endPromise }).then(msg => {
+            return msg && { role: "user", content: msg.text };
+        });
+
+        let index = 1;
         do {
-            // Ждем ответа от ИИ
-            answerFromAssistant = await telegramBot.sendBusy(msg.chat.id, async () => {
-                return ai.sendWithContext(answerFromUser);
-            });
-            // Отправляем ответ от ИИ
-            await telegramBot.sendMessage(msg.chat.id, answerFromAssistant.content);
-            // Ждем ответа от пользователя
-            answerFromUser = await telegramBot.waitForMessage(msg.chat.id, { endPromise: ai.endPromise }).then(msg => {
-                return msg ? { role: "user", content: msg.text, important: true } : false;
-            })
+            try {
+                const thisIsEnd = index > COUNT_BY_THEME;
+
+                if (thisIsEnd)  answerFromUser.content += MESSAGES.end;
+                else if (theme.addToAI) answerFromUser.content += theme.addToAI;
+                
+                // Ждем ответа от ИИ
+                chat.saveToHistory(answerFromUser);
+                answerFromAssistant = await chat.sendBusy(ai.sendHistory(chat.history));
+                // Сохраняем ответ от ИИ в историю
+                if (!thisIsEnd) chat.saveToHistory(answerFromAssistant);
+                else answerFromAssistant.content += MESSAGES.AIEnd;
+
+                // Отправляем ответ от ИИ
+                let sendToUser = answerFromAssistant.content;
+                if (!thisIsEnd) sendToUser = `${index}/${COUNT_BY_THEME}: ${sendToUser}`
+                await chat.sendMessage(sendToUser);
+
+                // Ждем ответа от пользователя
+                const anwerFromUserPromise = chat.waitForMessage({ endPromise }).then(msg => {
+                    return msg && { role: "user", content: msg.text };
+                })
+
+                // Таймаут если пользователь не ответил за 2 часа 
+                let timeout;
+                try {
+                    timeout = setTimeout(() => {
+                        if (chat.messageCounter < LIMIT_BY_USER && !thisIsEnd)
+                            chat.sendMessage(MESSAGES.timeout);
+                    }, TIMEOUT_FOR_USER_ANSWER);
+
+                    answerFromUser = await anwerFromUserPromise;
+                } finally {
+                    clearTimeout(timeout);
+                }
+
+                index++;
+            } catch (error) {
+                if (error?.message?.endsWith('ChatEnded:Handled')) return;
+                console.error(error)
+            }
             
         // Если ответ пустой значит пользователь закончил
         } while (answerFromUser);
     } catch (error) {
-        console.error(error.message)
-        ai.endConversation();
+        console.error(error);
+    } finally {
+        endConversation()
     }
-    
 })
+
+new RemindersController
+(telegramBot, {
+    sendInterval: REMINDERS_SEND_INTERVAL,
+    checkInterval: REMINDERS_CHECK_INTERVAL,
+    MESSAGES
+});

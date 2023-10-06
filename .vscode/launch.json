@@ -8,9 +8,8 @@
             "type": "node",
             "request": "attach",
             "name": "run Debug",
-            "remoteRoot": "/app/",
-            "localRoot": "${workspaceFolder}/",
-            "preLaunchTask": "npm:start",
+            "remoteRoot": "/app/src",
+            "localRoot": "${workspaceFolder}/src",
             "port": 9229,
             "restart": true
         }
