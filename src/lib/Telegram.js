@@ -30,12 +30,8 @@ process.on('SIGTERM', () => {
 });
 
 // healthcheck server
-let status = true;
-botInstance.on('poll', () => {
-    status = true;
-});
 botInstance.on('polling_error', () => {
-    status = false;
+    botInstance._pollingError = Date.now();
 });
 
 const requestHandler = (req, res) => {
@@ -43,13 +39,14 @@ const requestHandler = (req, res) => {
         // Здесь мы проверяем состояние бота
         botInstance.getMe()
             .then(me => {
-                if (!status) res.writeHead(500, {'Content-Type': 'application/json'});
+                // если ошибка свежее
+                if (botInstance._polling._lastUpdate < botInstance._pollingError) throw new Error('Polling error');
                 else res.writeHead(200, {'Content-Type': 'application/json'});
-                res.end();
+                res.end('ok');
             })
             .catch(error => {
                 res.writeHead(500, {'Content-Type': 'application/json'});
-                res.end();
+                res.end(error.message);
             });
     } else {
         res.writeHead(404, {'Content-Type': 'text/plain'});
