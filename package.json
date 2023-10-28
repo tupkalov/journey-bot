@@ -27,7 +27,8 @@
     "gpt-3-encoder": "^1.1.4",
     "node-telegram-bot-api": "^0.61.0",
     "openai": "^3.2.1",
-    "simple-json-db": "^2.0.0"
+    "simple-json-db": "^2.0.0",
+    "amocrm-js": "^3.4.2"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
