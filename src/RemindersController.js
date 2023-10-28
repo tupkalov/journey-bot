@@ -39,7 +39,16 @@ module.exports = class RemindersController {
                             // Проверяем что пользователь не свежесозданный
                             if (chat.cacheData.createDt && chat.cacheData.createDt > scheduleItem.dt) continue;
 
-                            chat.sendMessage(scheduleItem.text).catch((e) => {
+                            chat.sendMessage(scheduleItem.text, !chat.cacheData.joined ? {
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [{
+                                            text: MESSAGES.joinMessage,
+                                            callback_data: "/join"
+                                        }]
+                                    ]
+                                }
+                            } : {}).catch((e) => {
                                 console.error(e.message, 'scheduleError');
                             });
                         } catch (e) {
@@ -65,7 +74,16 @@ module.exports = class RemindersController {
                 chat.cacheData.reminderEnds = true;
             } else {
                 chat.cacheData.nextReminder++;
-                await chat.sendMessage(reminder);
+                await chat.sendMessage(reminder, !chat.cacheData.joined ? {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{
+                                text: MESSAGES.joinMessage,
+                                callback_data: "/join"
+                            }]
+                        ]
+                    }
+                } : {});
                 chat.lastMessageDt = Date.now();
             }
         } catch (e) {

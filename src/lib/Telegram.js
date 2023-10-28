@@ -65,7 +65,7 @@ class Chat extends EventEmitter {
         super();
 
         this.bot = bot;
-        if (this.bot.chats[id]) this.bot.chats[id].endConversation();
+        this.bot.chats[id]?.endConversation?.();
         this.bot.chats[id] = this;
         this.id = parseInt(id);
         this.messageCounter = 0;
@@ -121,17 +121,16 @@ class Chat extends EventEmitter {
         });
     }
 
-    async waitForMessage({ endPromise } = {}) {
+    async waitForMessage() {
         const promise = new Promise((resolve, reject) => {
             const handler = (event, msg) => {
                 if (msg.chat.id !== this.id) return;
                 event.stopPropagation()
                 this.bot.offMessage(handler);
-                delete this.waiting;
                 resolve(msg);
             };
             this.bot.onMessage(handler);
-            endPromise?.then(() => {
+            this.endPromise?.then(() => {
                 this.bot.offMessage(handler);
                 reject(new Error('ChatEnded:Handled'));
             });
@@ -158,15 +157,17 @@ class Chat extends EventEmitter {
     saveToHistory(message) {
         this.history = this.history || this.clearHistory();
         this.history.push(message);
-        this.messageCounter++;
+        if (message.role !== "system") 
+            this.messageCounter++;
+        
         this.historyReducer?.(this.history);
         this.saveCache();
     }
 
     _saveCache() {
         this.cacheData = chatsCache[this.id] = {
-            lastMessageDt: this.lastMessageDt,
             ...this.cacheData,
+            lastMessageDt: this.lastMessageDt,
             messageCounter: this.messageCounter
         };
 
@@ -177,14 +178,32 @@ class Chat extends EventEmitter {
         this.messageCounter = 0;
         this.saveCache();
     }
+
+    async createThread(thread, handler) {
+        this.thread = thread;
+        this.endConversation?.();
+        let endConversation;
+        const endPromise = this.endPromise = new Promise(resolve => endConversation = this.endConversation = resolve);
+        const isStopped = () => endPromise !== this.endPromise || !this.thread;
+        try {
+            await handler({ isStopped });
+        } catch(error) {
+            if (error?.message?.endsWith('ChatEnded:Handled')) return;
+            console.error(error.message);
+        } finally {
+            if (endPromise === this.endPromise) this.thread = null;
+            endConversation();
+        }
+    }
 }
 
 class TelegramBot {
     constructor() {
+        this.botInstance = botInstance;
         this.handlers = [];
         this.chats = {};
         botInstance.on('message', (msg) => {
-            const chat = this.chats[msg.chat.id] || new Chat(this, msg.chat.id, chatsCache[msg.chat.id]);
+            const chat = this.getChat(msg); 
 
             const event = {
                 propagationStopped: false,
@@ -202,6 +221,10 @@ class TelegramBot {
         })
 
         this.loadChatsFromCache();
+    }
+
+    getChat (msg) {
+        return this.chats[msg.chat.id] || new Chat(this, msg.chat.id, chatsCache[msg.chat.id]);
     }
     
     onMessage (handler) {

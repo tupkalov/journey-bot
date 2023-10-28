@@ -38,14 +38,14 @@ module.exports.AI = class AI extends EventEmitter{
     //     }
     // }
 
-    async sendHistory (history) {
+    async sendHistory (history, { gpt4 = false } = {}) {
         var answer;
         try {
             const response = await openai.createChatCompletion({
                 //model: "gpt-4-0613",
-                model: "gpt-3.5-turbo-0613",
+                model: gpt4 ? "gpt-4-0613" : "gpt-3.5-turbo-16k-0613",
                 messages: history.map(({ role, content }) => ({ role, content })),
-                max_tokens: 1000,
+                max_tokens: 500,
                 temperature: .8
             });
             answer = response.data.choices[0].message;
@@ -57,14 +57,14 @@ module.exports.AI = class AI extends EventEmitter{
     } 
 
     // Удаляет сообщения из контекста, пока его длина не станет меньше 2048
-    historyReducer (history) {
+    historyReducer (history, { maxTokenLength = 10000 } = {}) {
         // Возвращает длину всех сообщений в местных попугаях
         function getTokenLength() {
             return encode(history.map(val => val.content).join(' ')).length
         }
 
         label:
-        while (getTokenLength(history) > 3000) {
+        while (getTokenLength(history) > maxTokenLength) {
             for (const msg of history) {
                 if (msg.important) continue;
                 history.splice(history.indexOf(msg), 1);
