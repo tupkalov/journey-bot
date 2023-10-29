@@ -28,7 +28,9 @@
     "node-telegram-bot-api": "^0.61.0",
     "openai": "^3.2.1",
     "simple-json-db": "^2.0.0",
-    "amocrm-js": "^3.4.2"
+    "@notionhq/client": "^2.2.13",
+    "langchain": "^0.0.175",
+    "notion-to-md": "^3.1.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"

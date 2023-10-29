@@ -154,12 +154,13 @@ class Chat extends EventEmitter {
         this.history = [];
     }
 
-    saveToHistory(message) {
+    saveToHistory(...messages) {
         this.history = this.history || this.clearHistory();
-        this.history.push(message);
-        if (message.role !== "system") 
-            this.messageCounter++;
-        
+        for (const message of messages) {
+            this.history.push(message);
+            if (message.role !== "system") 
+                this.messageCounter++;
+        }
         this.historyReducer?.(this.history);
         this.saveCache();
     }

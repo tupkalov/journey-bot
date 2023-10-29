@@ -1,0 +1,9 @@
+{
+    "name": "amoIntergration",
+    "version": "1.0.0",
+    "description": "",
+    "dependencies": {
+      "amocrm-js": "^3.4.2"
+    }
+  }
+  

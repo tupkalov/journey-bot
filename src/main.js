@@ -1,20 +1,106 @@
 const { TelegramBot } = require('./lib/Telegram');
-const { AI } = require('./lib/AI');
-const { createLead } = require('./AmoClient')
+// const { AI } = require('./lib/AI');
 const MESSAGES = require('../config/messages.js');
-const RemindersController = require('./RemindersController');
+
+const NotionVectorStore = require('./integrations/NotionVectorStore');
+const NOTION_API_KEY = process.env.NOTION_API_KEY;
+if (!NOTION_API_KEY) throw new Error("NOTION_API_KEY is required");
+
+const NOTION_PAGE_ID = process.env.NOTION_PAGE_ID;
+if (!NOTION_PAGE_ID) throw new Error("NOTION_PAGE_ID is required");
+
+const notion = new NotionVectorStore({
+    apiKey: NOTION_API_KEY,
+    pageId: NOTION_PAGE_ID,
+    systemMessage: MESSAGES.systemMessage
+})
 
 const telegramBot = new TelegramBot;
+const TIMEOUT_FOR_USER_ANSWER = 1000 * 60 * 2; // 2 min
 
-const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
-const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
-const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.SOFTSKILLS_TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
-
-// Настройки работы напоминаний
-const REMINDERS_SEND_INTERVAL = parseInt(process.env.REMINDERS_SEND_INTERVAL) || 3 * 24 * 60 * 60 * 1000;
-const REMINDERS_CHECK_INTERVAL = parseInt(process.env.REMINDERS_CHECK_INTERVAL) || Math.round(REMINDERS_SEND_INTERVAL / 100); 
+const MAX_MESSAGES_PAIRS = 2;
+const historyReducer = (history) => {
+    if (history.length <= MAX_MESSAGES_PAIRS) return;
+    history.splice(0, history.length - MAX_MESSAGES_PAIRS);
+};
 
 const messageHandler = async (event, msg, chat) => {
+    try {
+        // Если сообщение не текстовое то кидаем ошибку пользователю
+        if (!msg.text) {
+            chat.sendMessage(MESSAGES.onlyText);
+            event.stopPropagation();
+            return;
+        }
+
+        if (msg.text === "/updateNotion") {
+            event.stopPropagation();
+            chat.sendMessage("Обновляю данные");
+            await notion.load();
+            chat.sendMessage("Данные обновлены");
+            return;
+        }
+
+        // Если в тексте команда то кидаем предложение задать вопрос
+        if (msg.text.startsWith('/')) {
+            chat.sendMessage(MESSAGES.askQuestion);
+            event.stopPropagation();
+            return;
+        }
+        // Если пользователь еще не писал ничего, то приветствуем его
+        if (chat.thread) {
+            return;
+        }
+
+        // Закрываем предыдущую беседу
+        event.stopPropagation();
+        chat.createThread("main", async ({ isStopped }) => {
+            chat.setHistoryReducer(historyReducer);
+            chat.clearHistory();
+            while (msg) {
+                console.log(`Запрос: ${msg.text}, от пользователя: ${msg.from.id}`)
+                // Соединяем все вопросы и ответы в список в строку
+                const historyForAI = chat.history.reduce((acc, msg) => {
+                    return acc + "- " + msg.content + "\n";
+                }, "")
+                
+                // Отправляем запрос в ИИ
+                const promise = notion.request(msg.text + MESSAGES.addToUserRequest, { history: historyForAI });
+                let answer; // Ждем ответ
+                promise.then(msg => (answer = msg));
+
+                // Таймаут если ИИ не ответил за 2 минуты
+                let timeout;
+                const timeoutPromise = new Promise(resolve => {
+                    timeout = setTimeout(() => {
+                        chat.sendMessage(MESSAGES.timeout);
+                    }, TIMEOUT_FOR_USER_ANSWER);
+                });
+                const commonPromise = Promise.race([promise, timeoutPromise]);
+
+                // Отправляем сообщение пользователю что ИИ думает
+                chat.sendBusy(commonPromise);
+                await commonPromise;
+                clearTimeout(timeout);
+
+                if (answer) {
+                    // Сохраняем ответ от ИИ в историю
+                    console.log(`Ответ: ${answer} для пользователя: ${msg.from.id}`)
+                    chat.saveToHistory({ role: "user", content: msg.text }, { role: "assistant", content: answer });
+                    // Отправляем ответ от ИИ
+                    chat.sendMessage(answer);
+                }
+
+                // Ждем ответа от пользователя
+                msg = await chat.waitForMessage()
+            }
+        });
+    } catch (error) {
+        console.error(error);
+    }
+};
+
+/*const messageHandler = async (event, msg, chat) => {
     try {
         if (msg.text === '/resetChatCounter') {
             event.stopPropagation();
@@ -23,73 +109,9 @@ const messageHandler = async (event, msg, chat) => {
             return;
         }
 
-        if (msg.text === '/resetReminders') {
-            event.stopPropagation();
-            chat.cacheData.reminderEnds = false;
-            chat.cacheData.nextReminder = 0;
-            chat.saveCache();
-            chat.sendMessage('Напоминания сброшены');
-            return;
-        }
-
-        if (msg.text === "/resetJoin") {
-            event.stopPropagation();
-            chat.cacheData.joined = false;
-            chat.saveCache();
-            chat.sendMessage('Можно присоедениться заново');
-            return;
-        }
-
-        if (msg.text === '/join') {
-            event.stopPropagation();
-            if (chat.cacheData.joined) {
-                return;
-            }
-
-            chat.createThread("join", async ({ isStopped }) => {
-                // EMAIL
-                chat.sendMessage(MESSAGES.joinEmail)
-                let email, name;
-                while (true) {
-                    const answerEmail = await chat.waitForMessage();
-                    if (/^[\w-+_\.]+@([\w-_]+\.)+[\w-]{2,4}$/.test(email = answerEmail.text.trim())) break;
-                    
-                    await chat.sendMessage(MESSAGES.joinWrongEmail);
-                };
-                // NAME
-                const namePromise = new Promise(async resolve => {
-                    // NAME
-                    await chat.sendMessage(MESSAGES.joinName);
-                    const answerName = await chat.waitForMessage();
-                    const name = answerName.text.trim().slice(0, 512);
-                    resolve(name);
-                });
-                const timeoutPromise = new Promise(resolve => setTimeout(() => resolve("Unknown name"), 60000 * 2)); // 2 min
-
-                name = await Promise.race([namePromise, timeoutPromise]);
-
-                await chat.sendMessage(MESSAGES.joinEnd);
-
-                await createLead({ name, email })
-
-                chat.cacheData.joined = true;
-            });
-
-            return;
-        }
-
         // ограничение на количество сообщений
         if (chat.messageCounter >= LIMIT_BY_USER && (!chat.thread || chat.thread === "main")) {
-            chat.sendMessage(MESSAGES.limit, chat.cacheData.joined ? {} : {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{
-                            text: MESSAGES.joinMessage,
-                            callback_data: "/join"
-                        }]
-                    ]
-                }
-            });
+            chat.sendMessage(MESSAGES.limit);
             event.stopPropagation();
             return;
         }
@@ -204,20 +226,13 @@ const messageHandler = async (event, msg, chat) => {
     } catch (error) {
         console.error(error);
     }
-};
+};*/
 telegramBot.onMessage(messageHandler)
 
 
-// Конвертируем нажатия на кнопку (присоедениться в запрос /join)
-telegramBot.botInstance.on('callback_query', (query) => {
-    if (query.data !== "/join") return;
-    const joinMessage = { ...query.message, text: "/join" };
-    messageHandler({ stopPropagation: () => {} }, joinMessage, telegramBot.getChat(query.message));
-});
-
-new RemindersController
-(telegramBot, {
-    sendInterval: REMINDERS_SEND_INTERVAL,
-    checkInterval: REMINDERS_CHECK_INTERVAL,
-    MESSAGES
-});
+// // Конвертируем нажатия на кнопку (присоедениться в запрос /join)
+// telegramBot.botInstance.on('callback_query', (query) => {
+//     if (query.data !== "/join") return;
+//     const joinMessage = { ...query.message, text: "/join" };
+//     messageHandler({ stopPropagation: () => {} }, joinMessage, telegramBot.getChat(query.message));
+// });*/
