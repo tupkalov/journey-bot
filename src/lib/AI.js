@@ -43,7 +43,7 @@ module.exports.AI = class AI extends EventEmitter{
         try {
             const response = await openai.createChatCompletion({
                 //model: "gpt-4-0613",
-                model: gpt4 ? "gpt-4-0613" : "gpt-3.5-turbo-16k-0613",
+                model: gpt4 ? "gpt-4-1106-preview" : "gpt-3.5-turbo-1106",
                 messages: history.map(({ role, content }) => ({ role, content })),
                 max_tokens: 500,
                 temperature: .8
