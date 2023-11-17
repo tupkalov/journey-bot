@@ -3,16 +3,16 @@ const { encode } = require("gpt-3-encoder");
 const EventEmitter = require('node:events');
 
 // Создайте экземпляр OpenAI
-if (!process.env.EQB_OPENAI_API_KEY) {
-    throw new Error('EQB_OPENAI_API_KEY is missing!')
+if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is missing!')
 }
-if (!process.env.EQB_OPENAI_ORG) {
-    throw new Error('EQB_OPENAI_ORG is missing!')
+if (!process.env.OPENAI_ORG) {
+    throw new Error('OPENAI_ORG is missing!')
 }
 
 const openAIConfig = new Configuration({
-  apiKey        : process.env.EQB_OPENAI_API_KEY,
-  organization  : process.env.EQB_OPENAI_ORG
+  apiKey        : process.env.OPENAI_API_KEY,
+  organization  : process.env.OPENAI_ORG
 });
 const openai = new OpenAIApi(openAIConfig);
 

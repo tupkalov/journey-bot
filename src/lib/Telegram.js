@@ -7,8 +7,8 @@ const updateJSON = () => {
     db.set('chatsCache', chatsCache);
 }
 
-const { EQB_BOT_TOKEN } = process.env;
-if (!EQB_BOT_TOKEN) throw new Error('EQB_BOT_TOKEN is missing!');
+const { BOT_TOKEN } = process.env;
+if (!BOT_TOKEN) throw new Error('BOT_TOKEN is missing!');
 
 function debounce(func, wait) {
     var timeout;
@@ -20,7 +20,7 @@ function debounce(func, wait) {
 }
 
 const TelegramBotApi = require('node-telegram-bot-api');
-const botInstance = new TelegramBotApi(EQB_BOT_TOKEN, { polling: true });
+const botInstance = new TelegramBotApi(BOT_TOKEN, { polling: true });
 console.log("Telegram bot started");
 
 process.on('SIGTERM', () => {

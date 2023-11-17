@@ -6,9 +6,9 @@ const RemindersController = require('./RemindersController');
 
 const telegramBot = new TelegramBot;
 
-const COUNT_BY_THEME = parseInt(process.env.SOFTSKILLS_COUNT_BY_THEME) || 4;
-const LIMIT_BY_USER = parseInt(process.env.SOFTSKILLS_LIMIT_BY_USER) || 50;
-const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.SOFTSKILLS_TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
+const COUNT_BY_THEME = parseInt(process.env.COUNT_BY_THEME) || 4;
+const LIMIT_BY_USER = parseInt(process.env.LIMIT_BY_USER) || 50;
+const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
 
 // Настройки работы напоминаний
 const REMINDERS_SEND_INTERVAL = parseInt(process.env.REMINDERS_SEND_INTERVAL) || 3 * 24 * 60 * 60 * 1000;
