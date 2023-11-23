@@ -6,7 +6,7 @@ const RemindersController = require('./RemindersController');
 
 const telegramBot = new TelegramBot;
 
-const COUNT_BY_THEME = parseInt(process.env.COUNT_BY_THEME) || 4;
+const COUNT_BY_THEME = parseInt(process.env.COUNT_BY_THEME) || 3;
 const LIMIT_BY_USER = parseInt(process.env.LIMIT_BY_USER) || 50;
 const TIMEOUT_FOR_USER_ANSWER = parseInt(process.env.TIMEOUT_FOR_USER_ANSWER) || 1000 * 60 * 60 * 2;
 
@@ -23,14 +23,14 @@ const messageHandler = async (event, msg, chat) => {
             return;
         }
 
-        if (msg.text === '/resetReminders') {
-            event.stopPropagation();
-            chat.cacheData.reminderEnds = false;
-            chat.cacheData.nextReminder = 0;
-            chat.saveCache();
-            chat.sendMessage('Напоминания сброшены');
-            return;
-        }
+        // if (msg.text === '/resetReminders') {
+        //     event.stopPropagation();
+        //     chat.cacheData.reminderEnds = false;
+        //     chat.cacheData.nextReminder = 0;
+        //     chat.saveCache();
+        //     chat.sendMessage('Напоминания сброшены');
+        //     return;
+        // }
 
         if (msg.text === "/resetJoin") {
             event.stopPropagation();
@@ -80,7 +80,7 @@ const messageHandler = async (event, msg, chat) => {
 
         // ограничение на количество сообщений
         if (chat.messageCounter >= LIMIT_BY_USER && (!chat.thread || chat.thread === "main")) {
-            chat.sendMessage(MESSAGES.limit, chat.cacheData.joined ? {} : {
+            await chat.sendMessage(MESSAGES.limit, chat.cacheData.joined ? {} : {
                 reply_markup: {
                     inline_keyboard: [
                         [{
@@ -107,20 +107,22 @@ const messageHandler = async (event, msg, chat) => {
             chat.setHistoryReducer(ai.historyReducer);
             chat.clearHistory();
             
-
             // Первое сообщение которое не отправляем пользователю
             const startMessage = { role: 'system', content: MESSAGES.context, important: true };
             chat.saveToHistory(startMessage);
             
             // Отправляем выбор темы и ждем выбора
             const choose = await chat.sendChooses(MESSAGES.chooseFromList, MESSAGES.themes.map(({ label }) => label));
+
+            const fullChooseItem = MESSAGES.themes.find(({ label }) => label === choose);
+            const fullChoose = fullChooseItem.fullname || fullChooseItem.label;
+
             chat._mainThreadStarted = true;
-            const theme = MESSAGES.themes.find(({ label }) => label === choose);
             // Формируем выбор темы пользователя для ИИ
-            var answerFromUser = { role: "user", content: MESSAGES.Ichose + choose, important: true };
+            var answerFromUser = { role: "user", content: MESSAGES.Ichose + fullChoose + MESSAGES.IchoseEnd, important: true };
             chat.saveToHistory(answerFromUser);
             // Отправляем ответ от ИИ
-            var answerFromAssistant = { role: "assistant", content: theme.start, important: true };
+            var answerFromAssistant = await chat.sendBusy(ai.sendHistory(chat.history, { gpt4: true }));
             chat.saveToHistory(answerFromAssistant);
             await chat.sendMessage(answerFromAssistant.content);
 
@@ -139,16 +141,16 @@ const messageHandler = async (event, msg, chat) => {
                     const exactlyEnd = index === COUNT_BY_THEME + 1;
                     
                     // Пока идет диалог говорим что отвечать асистенту
-                    if (!thisIsEnd && theme.addToAI) {
-                        chat.saveToHistory({ role: "system", content: theme.addToAI });
-                    }
+                    // if (!thisIsEnd && theme.addToAI) {
+                    //     chat.saveToHistory({ role: "system", content: theme.addToAI });
+                    // }
 
                     // Если последнее сообщение от юзера то просим оценить АИ
                     if (exactlyEnd) {
                         chat.saveToHistory({ role: "user", content: MESSAGES.end, dialog: true });
                         const filteredHistory = chat.history.filter(msg => msg.dialog);
                         ai.historyReducer(filteredHistory, { maxTokenLength: 4000 })
-                        answerFromAssistant = await chat.sendBusy(ai.sendHistory(filteredHistory, { gpt4: true }));
+                        answerFromAssistant = await chat.sendBusy(ai.sendHistory(filteredHistory/* , { gpt4: true } */));
                     } else {
                         answerFromAssistant = await chat.sendBusy(ai.sendHistory(chat.history));
                     }
@@ -195,14 +197,14 @@ const messageHandler = async (event, msg, chat) => {
                     index++;
                 } catch (error) {
                     if (error?.message?.endsWith('ChatEnded:Handled')) return;
-                    console.error(error)
+                    console.error(error.message)
                 }
                 
             // Если ответ пустой значит пользователь закончил
             } while (answerFromUser);
         });
     } catch (error) {
-        console.error(error);
+        console.error(error.message);
     }
 };
 telegramBot.onMessage(messageHandler)

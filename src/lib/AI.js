@@ -1,4 +1,4 @@
-const { Configuration, OpenAIApi } = require('openai');
+const { OpenAI } = require('openai');
 const { encode } = require("gpt-3-encoder");
 const EventEmitter = require('node:events');
 
@@ -10,11 +10,12 @@ if (!process.env.OPENAI_ORG) {
     throw new Error('OPENAI_ORG is missing!')
 }
 
-const openAIConfig = new Configuration({
-  apiKey        : process.env.OPENAI_API_KEY,
-  organization  : process.env.OPENAI_ORG
-});
-const openai = new OpenAIApi(openAIConfig);
+const openai = new OpenAI({
+    apiKey        : process.env.OPENAI_API_KEY,
+    organization  : process.env.OPENAI_ORG,
+    timeout       : 30000,
+    maxRetries    : 5
+  });
 
 module.exports.AI = class AI extends EventEmitter{
     constructor (userId) {
@@ -41,16 +42,17 @@ module.exports.AI = class AI extends EventEmitter{
     async sendHistory (history, { gpt4 = false } = {}) {
         var answer;
         try {
-            const response = await openai.createChatCompletion({
+            const response = await openai.chat.completions.create({
                 //model: "gpt-4-0613",
+                // model: "gpt-4-1106-preview",
                 model: gpt4 ? "gpt-4-1106-preview" : "gpt-3.5-turbo-1106",
                 messages: history.map(({ role, content }) => ({ role, content })),
-                max_tokens: 500,
+                max_tokens: 300,
                 temperature: .8
             });
-            answer = response.data.choices[0].message;
+            answer = response.choices[0].message;
         } catch (err) {
-            console.error(err)
+            console.error(err.message)
             throw new Error('OpenAI error')
         }
         return answer;

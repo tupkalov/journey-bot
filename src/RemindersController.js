@@ -26,7 +26,6 @@ module.exports = class RemindersController {
 
                 // send schedule
                 try {
-                    const { chats } = telegramBot;
                     for (const scheduleItem of schedule) {
                         try {
                             chat.cacheData.scheduledSended = chat.cacheData.scheduledSended || [];
