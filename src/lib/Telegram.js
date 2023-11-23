@@ -190,6 +190,7 @@ class Chat extends EventEmitter {
         } catch(error) {
             if (error?.message?.endsWith('ChatEnded:Handled')) return;
             console.error(error.message);
+            console.log({ headers: error.headers, data: error.data, status: error.status })
         } finally {
             if (endPromise === this.endPromise) this.thread = null;
             endConversation();

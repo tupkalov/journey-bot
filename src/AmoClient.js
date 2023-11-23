@@ -17,12 +17,18 @@ global.client = new Client({
     },
 });
 
+(async () => {
+    await new Promise(r => setTimeout(r, 2000));
 // принудительное обновление токена (если ранее не было запросов)
 const updateConnection = async () => {
-    if (!client.connection.isTokenExpired()) {
-        return;
+    try {
+        if (!client.connection.isTokenExpired()) {
+            return;
+        }
+        await client.connection.update();
+    } catch (e) {
+        console.error('updateConnectionError ' + e.message);
     }
-    await client.connection.update();
 }
 
 const filePath = path.resolve(__dirname, '../config/token.json');
@@ -43,9 +49,12 @@ try {
     const json = fs.readFileSync(filePath).toString();
     const currentToken = JSON.parse(json);
     client.token.setValue(currentToken);
+
+    await updateConnection();
 } catch (e) {
     // Файл не найден, некорректный JSON-токен
 }
+})();
 
 exports.createLead = async ({ name, email }) => {
     const newContact = new client.Contact

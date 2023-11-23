@@ -16,6 +16,8 @@ const openAIConfig = new Configuration({
 });
 const openai = new OpenAIApi(openAIConfig);
 
+var counter = 0;
+
 module.exports.AI = class AI extends EventEmitter{
     constructor (userId) {
         super();
@@ -50,9 +52,13 @@ module.exports.AI = class AI extends EventEmitter{
             });
             answer = response.data.choices[0].message;
         } catch (err) {
-            console.error(err)
-            throw new Error('OpenAI error')
+            throw err;
         }
+        // Берем последнее сообщение где роль user из истории но сокращаем
+        const userMessages = history.filter(({ role }) => role === 'user');
+        let lastUserMessage = userMessages[userMessages.length - 1].content;
+        if (lastUserMessage.length > 100) lastUserMessage = lastUserMessage.substring(0, 100) + '...';
+        console.log("AI request: " + (counter++) + " " + lastUserMessage);
         return answer;
     } 
 

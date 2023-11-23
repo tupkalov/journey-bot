@@ -16,12 +16,14 @@ module.exports = class RemindersController {
                     const chat = chats[id];
                     if (chat.lastMessageDt && Date.now() - chat.lastMessageDt > sendInterval) {
                         if (chat.cacheData.reminderEnds) continue;
-                        this.chatRemind(chat).catch((e) => {
-                            console.error(e.message, 'remindError');
+                        this.chatRemind(chat).catch((error) => {
+                            console.error('remindError ' + error.message);
+                            console.log({ headers: error.headers, data: error.data, status: error.status })
                         })
                     }
-                } catch (e) {
-                    console.error(e);
+                } catch (error) {
+                    console.error("remind sync error: " + error.message);
+                    console.log({ headers: error.headers, data: error.data, status: error.status });
                 }
 
                 // send schedule
@@ -49,16 +51,16 @@ module.exports = class RemindersController {
                                     ]
                                 }
                             } : {}).catch((e) => {
-                                console.error(e.message, 'scheduleError');
+                                console.error('scheduleSendError ' + e.message);
                             });
                         } catch (e) {
-                            console.error(e);
+                            console.error('scheduleError ' + e.message);
                         } finally {
                             chat?.saveCache();
                         }
                     }
                 } catch (e) {
-                    console.error(e);
+                    console.error('scheduleFullError ' + e.message);
                 }
             }
         }, checkInterval);
@@ -87,7 +89,7 @@ module.exports = class RemindersController {
                 chat.lastMessageDt = Date.now();
             }
         } catch (e) {
-            console.error(e);
+            console.error(`remindererror: ${e.message}; nextIndex: ${chat.cacheData.nextReminder}`);
         } finally {
             chat?.saveCache();
         }

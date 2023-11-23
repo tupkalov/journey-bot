@@ -70,7 +70,9 @@ const messageHandler = async (event, msg, chat) => {
 
                 await chat.sendMessage(MESSAGES.joinEnd);
 
-                await createLead({ name, email })
+                await createLead({ name, email }).catch(error => {
+                    console.error(`Ошибка отправки в AMO: ${name} ${email} (${error.message})`);
+                });
 
                 chat.cacheData.joined = true;
             });
@@ -195,14 +197,16 @@ const messageHandler = async (event, msg, chat) => {
                     index++;
                 } catch (error) {
                     if (error?.message?.endsWith('ChatEnded:Handled')) return;
-                    console.error(error)
+                    console.error("Main block error: " + error.message)
+                    console.log({ headers: error.headers, data: error.data, status: error.status })
                 }
                 
             // Если ответ пустой значит пользователь закончил
             } while (answerFromUser);
         });
     } catch (error) {
-        console.error(error);
+        console.error("Full block error: " + error.message);
+        console.log({ headers: error.headers, data: error.data, status: error.status })
     }
 };
 telegramBot.onMessage(messageHandler)
