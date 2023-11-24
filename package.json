@@ -26,6 +26,7 @@
   "dependencies": {
     "amocrm-js": "^3.4.2",
     "gpt-3-encoder": "^1.1.4",
+    "markdown-escape": "^2.0.0",
     "node-telegram-bot-api": "^0.61.0",
     "openai": "^4.19.0",
     "simple-json-db": "^2.0.0"

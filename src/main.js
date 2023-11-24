@@ -3,6 +3,7 @@ const { AI } = require('./lib/AI');
 const { createLead } = require('./AmoClient')
 const MESSAGES = require('../config/messages.js');
 const RemindersController = require('./RemindersController');
+const markdownEscape = require('markdown-escape');
 
 const telegramBot = new TelegramBot;
 
@@ -48,18 +49,18 @@ const messageHandler = async (event, msg, chat) => {
 
             chat.createThread("join", async ({ isStopped }) => {
                 // EMAIL
-                chat.sendMessage(MESSAGES.joinEmail)
+                chat.sendMessage(MESSAGES.joinEmail, { parse_mode: 'Markdown' })
                 let email, name;
                 while (true) {
                     const answerEmail = await chat.waitForMessage();
                     if (/^[\w-+_\.]+@([\w-_]+\.)+[\w-]{2,4}$/.test(email = answerEmail.text.trim())) break;
                     
-                    await chat.sendMessage(MESSAGES.joinWrongEmail);
+                    await chat.sendMessage(MESSAGES.joinWrongEmail, { parse_mode: 'Markdown' });
                 };
                 // NAME
                 const namePromise = new Promise(async resolve => {
                     // NAME
-                    await chat.sendMessage(MESSAGES.joinName);
+                    await chat.sendMessage(MESSAGES.joinName, { parse_mode: 'Markdown' });
                     const answerName = await chat.waitForMessage();
                     const name = answerName.text.trim().slice(0, 512);
                     resolve(name);
@@ -68,7 +69,7 @@ const messageHandler = async (event, msg, chat) => {
 
                 name = await Promise.race([namePromise, timeoutPromise]);
 
-                await chat.sendMessage(MESSAGES.joinEnd);
+                await chat.sendMessage(MESSAGES.joinEnd, { parse_mode: 'Markdown' });
 
                 await createLead({ name, email })
 
@@ -80,15 +81,18 @@ const messageHandler = async (event, msg, chat) => {
 
         // ограничение на количество сообщений
         if (chat.messageCounter >= LIMIT_BY_USER && (!chat.thread || chat.thread === "main")) {
-            await chat.sendMessage(MESSAGES.limit, chat.cacheData.joined ? {} : {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{
-                            text: MESSAGES.joinMessage,
-                            callback_data: "/join"
-                        }]
-                    ]
-                }
+            await chat.sendMessage(MESSAGES.limit, {
+                parse_mode: 'Markdown',
+                ...(chat.cacheData.joined ? {} : {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{
+                                text: MESSAGES.joinMessage,
+                                callback_data: "/join"
+                            }]
+                        ]
+                    }
+                })
             });
             event.stopPropagation();
             return;
@@ -112,7 +116,9 @@ const messageHandler = async (event, msg, chat) => {
             chat.saveToHistory(startMessage);
             
             // Отправляем выбор темы и ждем выбора
-            const choose = await chat.sendChooses(MESSAGES.chooseFromList, MESSAGES.themes.map(({ label }) => label));
+            const choose = await chat.sendChooses(MESSAGES.chooseFromList, MESSAGES.themes.map(({ label }) => label), {
+                parse_mode: 'Markdown'
+            });
 
             const fullChooseItem = MESSAGES.themes.find(({ label }) => label === choose);
             const fullChoose = fullChooseItem.fullname || fullChooseItem.label;
@@ -159,22 +165,25 @@ const messageHandler = async (event, msg, chat) => {
                     // Сохраняем ответ от ИИ в историю
                     answerFromAssistant.dialog = true;
                     chat.saveToHistory(answerFromAssistant);
+                    answerFromAssistant.content = markdownEscape(answerFromAssistant.content)
                     if (thisIsEnd) answerFromAssistant.content += MESSAGES.AIEnd;
 
                     // Отправляем ответ от ИИ
                     let sendToUser = answerFromAssistant.content;
                     if (!thisIsEnd) sendToUser = `${index}/${COUNT_BY_THEME}: ${sendToUser}`
                     
-                    await chat.sendMessage(sendToUser, !chat.cacheData.joined && thisIsEnd ? {
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{
-                                    text: MESSAGES.joinMessage,
-                                    callback_data: "/join"
-                                }]
-                            ]
-                        }
-                    } : {});
+                    await chat.sendMessage(sendToUser, {
+                        parse_mode: 'Markdown',
+                        ...(!chat.cacheData.joined && thisIsEnd ? {
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{
+                                        text: MESSAGES.joinMessage,
+                                        callback_data: "/join"
+                                    }]
+                                ]
+                            }
+                        } : {}) });
 
                     // Ждем ответа от пользователя
                     const anwerFromUserPromise = chat.waitForMessage().then(msg => {
@@ -186,7 +195,7 @@ const messageHandler = async (event, msg, chat) => {
                     try {
                         timeout = setTimeout(() => {
                             if (chat.messageCounter < LIMIT_BY_USER && !thisIsEnd)
-                                chat.sendMessage(MESSAGES.timeout);
+                                chat.sendMessage(MESSAGES.timeout, { parse_mode: 'Markdown' });
                         }, TIMEOUT_FOR_USER_ANSWER);
 
                         answerFromUser = await anwerFromUserPromise;
@@ -197,7 +206,7 @@ const messageHandler = async (event, msg, chat) => {
                     index++;
                 } catch (error) {
                     if (error?.message?.endsWith('ChatEnded:Handled')) return;
-                    console.error(error.message)
+                    throw error;
                 }
                 
             // Если ответ пустой значит пользователь закончил

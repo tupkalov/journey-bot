@@ -79,8 +79,9 @@ class Chat extends EventEmitter {
         })
     }
 
-    async sendChooses(header, chooses) {
+    async sendChooses(header, chooses, options) {
         const inlineKeyboardMessage = await this.sendMessage(header, {
+            ...options,
             reply_markup: {
                 inline_keyboard: Object.entries(chooses).map(([key, value]) => ([{
                     text: value,
@@ -141,7 +142,6 @@ class Chat extends EventEmitter {
 
     async sendMessage(text, options) {
         return botInstance.sendMessage(this.id, text, {
-            parse_mode: 'Markdown',
             ...options
         });
     }
