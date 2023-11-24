@@ -143,7 +143,9 @@ class Chat extends EventEmitter {
     async sendMessage(text, options) {
         return botInstance.sendMessage(this.id, text, {
             ...options
-        });
+        }).catch(error => {
+            console.error(`error send message to ${this.id}: ${text}`, options);   
+        })
     }
 
     setHistoryReducer(reducer) {
